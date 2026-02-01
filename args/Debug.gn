@@ -1,0 +1,13 @@
+# Set build arguments here. See `gn help buildargs`.
+# Set build arguments here. See `gn help buildargs`.
+is_debug = true
+# use_remoteexec = true
+is_component_build = true
+target_cpu = "x64"
+v8_symbol_level = 0
+blink_symbol_level = 0
+chrome_pgo_phase = 0
+is_official_build = false
+is_chrome_branded = false
+branding_path_component = "Velloc"
+enable_custom_browser = true
