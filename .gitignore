@@ -1,0 +1,17 @@
+# Workspace tooling
+/depot_tools/
+/docs/
+/_gclient_*/
+/_bad_scm/
+/.gclient_entries
+/.gcs_entries
+/.cipd_bin/
+/.cipd/
+/cipd_bin/
+
+# gclient / Chromium checkout
+/src/
+
+# Python
+__pycache__/
+*.pyc

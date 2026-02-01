@@ -1,0 +1,30 @@
+{
+  "tag": "custom_browser-v144.0.1.0",
+  "created_utc": "2026-02-22T17:27:38Z",
+  "versions": {
+    "chrome_major": 144,
+    "custom_browser_minor": 0,
+    "custom_browser_build": 1,
+    "custom_browser_patch": 0
+  },
+  "repos": [
+    {
+      "name": "root",
+      "path": ".",
+      "tag": "custom_browser-v144.0.1.0",
+      "head": null
+    },
+    {
+      "name": "src",
+      "path": "src",
+      "tag": "custom_browser-v144.0.1.0",
+      "head": "e268949cecb96dab0d3703def414923486004e79"
+    },
+    {
+      "name": "custom_browser",
+      "path": "src\\custom_browser",
+      "tag": "custom_browser-v144.0.1.0",
+      "head": "b9a25c16932619d71c8fe720f3887d3ac77733a5"
+    }
+  ]
+}

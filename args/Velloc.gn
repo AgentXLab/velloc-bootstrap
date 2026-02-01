@@ -1,0 +1,37 @@
+# Set build arguments here. See `gn help buildargs`.
+# =====================================================================
+#  Fully Optimized Production Installer Build (Safe / Guaranteed)
+# =====================================================================
+enable_custom_browser = true
+branding_path_component = "Velloc"
+# branding_path_component = "Nextor"
+is_debug = false
+is_official_build = true
+is_component_build = false        # REQUIRED for installer
+
+symbol_level = 0                  # smallest binary, fastest build
+
+target_cpu = "x64"
+enable_precompiled_headers = true
+
+# Installer
+enable_chrome_installers = true
+build_chrome_installer = true
+chrome_pgo_phase = 0
+
+# Media
+ffmpeg_branding = "Chrome"
+proprietary_codecs = true
+
+# Remove deprecated features
+enable_nacl = false
+
+# Disable detailed debug info
+blink_symbol_level = 0
+
+# Branding
+is_chrome_branded = false
+
+# Windows-specific optimizations
+enable_iterator_debugging = false
+treat_warnings_as_errors = false
