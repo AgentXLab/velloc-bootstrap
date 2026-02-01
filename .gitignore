@@ -1,0 +1,26 @@
+# Workspace tooling
+/depot_tools/
+/docs/
+/_gclient_*/
+/_bad_scm/
+/.gclient_*
+/.gcs_entries
+/.cipd_bin/
+/.cipd/
+/.github/
+/.cursor/
+/.velloc/
+/.agent/
+/.claude/
+/cipd_bin/
+/claude_code/
+/nexus_web/
+/packages/
+CLAUDE.md
+VELLOC.md
+# gclient / Chromium checkout
+/src/
+
+# Python
+__pycache__/
+*.pyc
