@@ -7,6 +7,8 @@
 /.gcs_entries
 /.cipd_bin/
 /.cipd/
+/.github/
+/.cursor/
 /cipd_bin/
 
 # gclient / Chromium checkout
