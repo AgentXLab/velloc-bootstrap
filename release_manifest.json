@@ -1,30 +1,30 @@
 {
-  "tag": "custom_browser-v144.0.1.0",
-  "created_utc": "2026-02-24T19:33:42Z",
+  "tag": "custom_browser-v144.0.2.0",
+  "created_utc": "2026-03-07T22:12:44Z",
   "versions": {
     "chrome_major": 144,
     "custom_browser_minor": 0,
-    "custom_browser_build": 1,
+    "custom_browser_build": 2,
     "custom_browser_patch": 0
   },
   "repos": [
     {
       "name": "root",
       "path": ".",
-      "tag": "custom_browser-v144.0.1.0",
-      "head": "71bd69801a179f8eb381a65954a49a4cf0694e57"
+      "tag": "custom_browser-v144.0.2.0",
+      "head": "4424a9bd939752b82e16e538f7210d35783317b4"
     },
     {
       "name": "src",
       "path": "src",
-      "tag": "custom_browser-v144.0.1.0",
-      "head": "15e4cf3fafa2ec691ca50b486c302bdd8b7a8d71"
+      "tag": "custom_browser-v144.0.2.0",
+      "head": "05595e1710863d7ac8f213e1059d35943e58a6b3"
     },
     {
       "name": "custom_browser",
       "path": "src\\custom_browser",
-      "tag": "custom_browser-v144.0.1.0",
-      "head": "7168001d116ca7c3a632aaf31ee2aebdedac435d"
+      "tag": "custom_browser-v144.0.2.0",
+      "head": "baff8e6968421ea04227091b230072cb49e28eaa"
     }
   ]
 }
