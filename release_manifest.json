@@ -1,6 +1,6 @@
 {
   "tag": "custom_browser-v144.0.2.0",
-  "created_utc": "2026-03-07T22:12:44Z",
+  "created_utc": "2026-03-07T22:36:46Z",
   "versions": {
     "chrome_major": 144,
     "custom_browser_minor": 0,
@@ -12,7 +12,7 @@
       "name": "root",
       "path": ".",
       "tag": "custom_browser-v144.0.2.0",
-      "head": "4424a9bd939752b82e16e538f7210d35783317b4"
+      "head": "13917be39af8b8a78e237f8ffbe912d895032d7b"
     },
     {
       "name": "src",
@@ -24,7 +24,7 @@
       "name": "custom_browser",
       "path": "src\\custom_browser",
       "tag": "custom_browser-v144.0.2.0",
-      "head": "baff8e6968421ea04227091b230072cb49e28eaa"
+      "head": "a111e579ab178939b6dd0e6eee5515284adb724d"
     }
   ]
 }
