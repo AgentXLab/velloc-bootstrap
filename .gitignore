@@ -3,7 +3,7 @@
 /docs/
 /_gclient_*/
 /_bad_scm/
-/.gclient_entries
+/.gclient_*
 /.gcs_entries
 /.cipd_bin/
 /.cipd/
