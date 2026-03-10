@@ -1,8 +1,8 @@
 {
-  "tag": "custom_browser-v144.0.2.1",
-  "created_utc": "2026-03-08T15:03:59Z",
+  "tag": "custom_browser-v146.0.2.1",
+  "created_utc": "2026-03-10T14:06:56Z",
   "versions": {
-    "chrome_major": 144,
+    "chrome_major": 146,
     "custom_browser_minor": 0,
     "custom_browser_build": 2,
     "custom_browser_patch": 1
@@ -11,20 +11,20 @@
     {
       "name": "root",
       "path": ".",
-      "tag": "custom_browser-v144.0.2.1",
-      "head": "159cbb83f63eb061e956c66e74d576f9d468223c"
+      "tag": "custom_browser-v146.0.2.1",
+      "head": "464f3547aff0aa2d4d7fc5c879c6b833118ba550"
     },
     {
       "name": "src",
       "path": "src",
-      "tag": "custom_browser-v144.0.2.1",
-      "head": "05595e1710863d7ac8f213e1059d35943e58a6b3"
+      "tag": "custom_browser-v146.0.2.1",
+      "head": "f2ceafc88cd5c041cec11782e66648c675d4ebaa"
     },
     {
       "name": "custom_browser",
       "path": "src\\custom_browser",
-      "tag": "custom_browser-v144.0.2.1",
-      "head": "51f450cc02096b81b254db2434767c0ed5e5acfd"
+      "tag": "custom_browser-v146.0.2.1",
+      "head": "e2bee1c9a314098a633dbd7a3de3b617f23caf7e"
     }
   ]
 }
