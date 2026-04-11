@@ -1,7 +1,7 @@
 # Set build arguments here. See `gn help buildargs`.
-# Set build arguments here. See `gn help buildargs`.
 is_debug = true
 # use_remoteexec = true
+cc_wrapper = "sccache"
 is_component_build = true
 target_cpu = "x64"
 v8_symbol_level = 0

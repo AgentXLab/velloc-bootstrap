@@ -185,8 +185,8 @@ build_chrome() {
 
   ensure_gn_gen "$out_dir"
 
-  echo "==> autoninja -C $out_dir chrome"
-  autoninja -C "$out_dir" chrome
+  echo "==> autoninja -C $out_dir chrome -j 15"
+  autoninja -C "$out_dir" chrome -j 15
 }
 
 find_arg_index_by_name() {

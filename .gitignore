@@ -10,6 +10,8 @@
 /.github/
 /.cursor/
 /cipd_bin/
+/claude_code/
+/nexus_web/
 
 # gclient / Chromium checkout
 /src/

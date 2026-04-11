@@ -1,16 +1,36 @@
 {
   "folders": [
     {
-      "name": "custom_browser",
-      "path": "./src/custom_browser"
+      "name": "bootstrap",
+      "path": "."
     },
     {
       "name": "chromium",
       "path": "./src"
     },
     {
-      "name": "bootstrap",
-      "path": "."
+      "name": "docs",
+      "path": "./docs/agents"
+    },
+    {
+      "name": "custom_browser",
+      "path": "./src/custom_browser"
+    },
+    {
+      "name": "nexus_web",
+      "path": "./nexus_web"
+    },
+    {
+      "name": "nexus_browser",
+      "path": "./src/custom_browser/browser/nexus"
+    },
+    {
+      "name": "nexus_browser_web",
+      "path": "./src/custom_browser/resources/patch_webui/glic"
+    },
+    {
+      "name": "claude_code",
+      "path": "./claude_code"
     }
   ],
   "settings": {

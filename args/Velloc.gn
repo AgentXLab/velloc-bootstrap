@@ -4,6 +4,7 @@
 # =====================================================================
 enable_custom_browser = true
 branding_path_component = "Velloc"
+cc_wrapper = "sccache"
 # branding_path_component = "Nextor"
 is_debug = false
 is_official_build = true
