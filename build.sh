@@ -484,6 +484,28 @@ run_nexus_unit_tests() {
   "$WORKSPACE_DIR/scripts/run_nexus_tests.sh" "$name"
 }
 
+run_nexus_webui_tests() {
+  echo "==> Select args for nexus WebUI tests"
+  echo "    Note: this builds browser_tests, which is a multi-hour first build."
+  for i in "${!arg_files[@]}"; do
+    printf "%2d) %s\n" $((i + 1)) "${arg_files[$i]}"
+  done
+
+  read -r -p "Select args [1-${#arg_files[@]}] (default: $last_arg_choice): " choice
+  if [ -z "$choice" ] || ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt "${#arg_files[@]}" ]; then
+    choice=$last_arg_choice
+    local default_idx=$((choice - 1))
+    echo "Invalid choice; defaulting to ${arg_files[$default_idx]}."
+  else
+    last_arg_choice=$choice
+  fi
+
+  local idx=$((choice - 1))
+  local name="${arg_names[$idx]}"
+
+  "$WORKSPACE_DIR/scripts/run_nexus_webui_tests.sh" "$name"
+}
+
 while true; do
   echo "==> Build options:"
   for i in "${!arg_names[@]}"; do
@@ -493,11 +515,13 @@ while true; do
   menu_reinstall_nsis=$(( ${#arg_names[@]} + 2 ))
   menu_release_tag=$(( ${#arg_names[@]} + 3 ))
   menu_nexus_tests=$(( ${#arg_names[@]} + 4 ))
-  menu_exit=$(( ${#arg_names[@]} + 5 ))
+  menu_nexus_webui_tests=$(( ${#arg_names[@]} + 5 ))
+  menu_exit=$(( ${#arg_names[@]} + 6 ))
   printf "%2d) Build mini_installer\n" "$menu_build_mini"
   printf "%2d) Reinstall Velloc NSIS\n" "$menu_reinstall_nsis"
   printf "%2d) Release/tag custom browser\n" "$menu_release_tag"
-  printf "%2d) Run nexus unit tests\n" "$menu_nexus_tests"
+  printf "%2d) Run nexus unit tests (C++)\n" "$menu_nexus_tests"
+  printf "%2d) Run nexus WebUI tests (TS, via browser_tests)\n" "$menu_nexus_webui_tests"
   printf "%2d) Exit\n" "$menu_exit"
 
   read -r -p "Select option [1-$menu_exit] (default: $last_choice): " choice
@@ -511,6 +535,8 @@ while true; do
   if [ "$choice" -eq "$menu_exit" ]; then
     echo "Exiting."
     break
+  elif [ "$choice" -eq "$menu_nexus_webui_tests" ]; then
+    run_nexus_webui_tests
   elif [ "$choice" -eq "$menu_nexus_tests" ]; then
     run_nexus_unit_tests
   elif [ "$choice" -eq "$menu_release_tag" ]; then
