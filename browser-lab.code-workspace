@@ -101,6 +101,9 @@
   "task.autoDetect": "off",
   "mojom.enableLanguageServer": "Disabled",
   "git.ignoreLimitWarning": true,
+  "chat.tools.terminal.autoApprove": {
+    "Get-Item": true
+  },
   // Used by tasks.json for integration with Chrome tests and builds.
   //
   // Optional: Wider author column for annotator extension.

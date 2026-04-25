@@ -174,6 +174,23 @@ ensure_gn_gen() {
   fi
 }
 
+# Copy args.gn into the out dir only when content actually differs.
+# Bare `cp -f` updates mtime even if content is unchanged, which trips ninja's
+# build.ninja regen rule (args.gn is one of its inputs). gn gen then re-runs,
+# which re-evaluates ~9000 BUILD.gn files, re-runs every exec_script, and
+# re-stamps many generated headers. Even with restat, the cascading restat
+# churn turns a no-op build into a long one — and any side effect that lands
+# new content into a widely-included header (e.g. buildflags.h) cascades into
+# a multi-thousand-file rebuild.
+sync_args_gn() {
+  local src="$1"
+  local dst="$2"
+  if [ ! -f "$dst" ] || ! cmp -s "$src" "$dst"; then
+    cp -f "$src" "$dst"
+    echo "==> args.gn updated (content changed) -> $dst"
+  fi
+}
+
 build_chrome() {
   local idx="$1"
   local name="${arg_names[$idx]}"
@@ -181,7 +198,7 @@ build_chrome() {
   local out_dir="$OUT_BASE/$name"
 
   mkdir -p "$out_dir"
-  cp -f "$ARGS_DIR/$file" "$out_dir/args.gn"
+  sync_args_gn "$ARGS_DIR/$file" "$out_dir/args.gn"
 
   ensure_gn_gen "$out_dir"
 
@@ -221,12 +238,12 @@ build_mini_installer() {
   local out_dir="$OUT_BASE/$name"
 
   mkdir -p "$out_dir"
-  cp -f "$ARGS_DIR/$file" "$out_dir/args.gn"
+  sync_args_gn "$ARGS_DIR/$file" "$out_dir/args.gn"
 
   ensure_gn_gen "$out_dir"
 
-  echo "==> autoninja -C $out_dir mini_installer"
-  autoninja -C "$out_dir" mini_installer
+  echo "==> autoninja -C $out_dir mini_installer -j 15"
+  autoninja -C "$out_dir" mini_installer -j 15
 
   local mini_installer_path=""
   if ! mini_installer_path="$(resolve_mini_installer_path "$out_dir")"; then
@@ -287,12 +304,12 @@ build_velloc_mini_installer() {
   local out_dir="$OUT_BASE/$name"
 
   mkdir -p "$out_dir"
-  cp -f "$ARGS_DIR/$file" "$out_dir/args.gn"
+  sync_args_gn "$ARGS_DIR/$file" "$out_dir/args.gn"
 
   ensure_gn_gen "$out_dir"
 
-  echo "==> autoninja -C $out_dir mini_installer"
-  autoninja -C "$out_dir" mini_installer
+  echo "==> autoninja -C $out_dir mini_installer -j 15"
+  autoninja -C "$out_dir" mini_installer -j 15
 
   local mini_installer_path=""
   if ! mini_installer_path="$(resolve_mini_installer_path "$out_dir")"; then
