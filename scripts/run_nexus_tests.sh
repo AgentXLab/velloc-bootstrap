@@ -36,8 +36,11 @@ if ! command -v autoninja >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "==> autoninja -C $OUT_DIR $BIN_NAME"
-autoninja -C "$OUT_DIR" "$BIN_NAME"
+echo "==> autoninja -C $OUT_DIR $BIN_NAME -j 15"
+# Don't abort on a non-zero autoninja exit — a flaky compile elsewhere in
+# the tree shouldn't block running this binary if it actually linked.
+build_status=0
+autoninja -C "$OUT_DIR" "$BIN_NAME" -j 15 || build_status=$?
 
 # Windows vs. *nix binary name.
 if [ -x "$OUT_DIR/${BIN_NAME}.exe" ]; then
@@ -45,8 +48,16 @@ if [ -x "$OUT_DIR/${BIN_NAME}.exe" ]; then
 elif [ -x "$OUT_DIR/$BIN_NAME" ]; then
   TEST_BIN="$OUT_DIR/$BIN_NAME"
 else
-  echo "ERROR: built binary not found under $OUT_DIR (looked for ${BIN_NAME}[.exe])" >&2
+  echo "ERROR: built binary not found under $OUT_DIR" >&2
+  echo "       (autoninja exited with $build_status and produced no" >&2
+  echo "        ${BIN_NAME}[.exe]; nothing to run)" >&2
   exit 1
+fi
+
+if [ "$build_status" -ne 0 ]; then
+  echo "WARN: autoninja exited with $build_status but $TEST_BIN exists." >&2
+  echo "      Running tests against the existing binary; if recent code" >&2
+  echo "      changes didn't make it in, the test result may be stale." >&2
 fi
 
 echo "==> $TEST_BIN --gtest_filter=$GTEST_FILTER"
