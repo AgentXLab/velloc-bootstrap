@@ -502,25 +502,13 @@ run_nexus_unit_tests() {
 }
 
 run_nexus_webui_tests() {
-  echo "==> Select args for nexus WebUI tests"
-  echo "    Note: this builds browser_tests, which is a multi-hour first build."
-  for i in "${!arg_files[@]}"; do
-    printf "%2d) %s\n" $((i + 1)) "${arg_files[$i]}"
-  done
+  read -r -p "Optional vitest filter (file path, glob, or substring; ENTER to run all): " filter
 
-  read -r -p "Select args [1-${#arg_files[@]}] (default: $last_arg_choice): " choice
-  if [ -z "$choice" ] || ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt "${#arg_files[@]}" ]; then
-    choice=$last_arg_choice
-    local default_idx=$((choice - 1))
-    echo "Invalid choice; defaulting to ${arg_files[$default_idx]}."
+  if [ -z "$filter" ]; then
+    "$WORKSPACE_DIR/scripts/run_nexus_webui_tests.sh"
   else
-    last_arg_choice=$choice
+    "$WORKSPACE_DIR/scripts/run_nexus_webui_tests.sh" "$filter"
   fi
-
-  local idx=$((choice - 1))
-  local name="${arg_names[$idx]}"
-
-  "$WORKSPACE_DIR/scripts/run_nexus_webui_tests.sh" "$name"
 }
 
 while true; do
@@ -538,7 +526,7 @@ while true; do
   printf "%2d) Reinstall Velloc NSIS\n" "$menu_reinstall_nsis"
   printf "%2d) Release/tag custom browser\n" "$menu_release_tag"
   printf "%2d) Run nexus unit tests (C++)\n" "$menu_nexus_tests"
-  printf "%2d) Run nexus WebUI tests (TS, via browser_tests)\n" "$menu_nexus_webui_tests"
+  printf "%2d) Run nexus WebUI tests (TS, via vitest)\n" "$menu_nexus_webui_tests"
   printf "%2d) Exit\n" "$menu_exit"
 
   read -r -p "Select option [1-$menu_exit] (default: $last_choice): " choice
