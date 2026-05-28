@@ -48,6 +48,28 @@ if ! command -v autoninja >/dev/null 2>&1; then
   exit 1
 fi
 
+# Pre-start the sccache daemon. Each `sccache clang-cl ...` invocation
+# checks whether a server is alive on port 4226 and spawns one if not.
+# When dozens of compile workers launch in parallel at -j 15, two of
+# them can race the "spawn" step and the loser dies with WSAEADDRINUSE
+# (os error 10048), failing that compile step and aborting siso.
+# Starting the daemon up-front avoids the race; the command is a no-op
+# if a server is already healthy.
+if command -v sccache >/dev/null 2>&1; then
+  sccache --start-server >/dev/null 2>&1 || true
+fi
+
+# Redirect siso's own glog files off C:\Users\...\AppData\Local\Temp.
+# A single long build can emit ~1.8 GiB of WARNING logs (one record per
+# input-state mismatch), and historically a dozen accumulated runs
+# filled the C: drive, after which siso would FATAL with "not enough
+# space" mid-compile. siso is just a Go binary using glog, so the
+# standard GLOG_log_dir env var moves the destination. We keep the
+# logs alongside the build output, which lives on a roomy drive.
+SISO_LOG_DIR="$OUT_BASE/siso-logs"
+mkdir -p "$SISO_LOG_DIR"
+export GLOG_log_dir="$SISO_LOG_DIR"
+
 ensure_gn_available() {
   if ! command -v gn >/dev/null 2>&1; then
     echo "ERROR: gn not found in PATH."
@@ -196,14 +218,21 @@ build_chrome() {
   local name="${arg_names[$idx]}"
   local file="${arg_files[$idx]}"
   local out_dir="$OUT_BASE/$name"
+  # Use a relative -C and cwd=$SRC_DIR so siso/ninja key their cache by
+  # the same canonical build-dir path that the VS Code task uses
+  # (.vscode/tasks.json runs from inside src/ with -C out/<name>). MSYS
+  # otherwise rewrites the absolute POSIX path into mixed-separator
+  # form (D:\project\...\src/out/Debug) which siso buckets separately
+  # from the all-backslash form, invalidating every cached action.
+  local rel_out="out/$name"
 
   mkdir -p "$out_dir"
   sync_args_gn "$ARGS_DIR/$file" "$out_dir/args.gn"
 
   ensure_gn_gen "$out_dir"
 
-  echo "==> autoninja -C $out_dir chrome -j 15"
-  autoninja -C "$out_dir" chrome -j 15
+  echo "==> autoninja -C $rel_out chrome -j 15  (cwd=$SRC_DIR)"
+  ( cd "$SRC_DIR" && autoninja -C "$rel_out" chrome -j 15 )
 }
 
 find_arg_index_by_name() {
@@ -236,14 +265,16 @@ build_mini_installer() {
   local file="${arg_files[$idx]}"
   local name="${arg_names[$idx]}"
   local out_dir="$OUT_BASE/$name"
+  # See build_chrome() for why we go relative + subshell-cd.
+  local rel_out="out/$name"
 
   mkdir -p "$out_dir"
   sync_args_gn "$ARGS_DIR/$file" "$out_dir/args.gn"
 
   ensure_gn_gen "$out_dir"
 
-  echo "==> autoninja -C $out_dir mini_installer -j 15"
-  autoninja -C "$out_dir" mini_installer -j 15
+  echo "==> autoninja -C $rel_out mini_installer -j 15  (cwd=$SRC_DIR)"
+  ( cd "$SRC_DIR" && autoninja -C "$rel_out" mini_installer -j 15 )
 
   local mini_installer_path=""
   if ! mini_installer_path="$(resolve_mini_installer_path "$out_dir")"; then
@@ -302,14 +333,16 @@ build_velloc_mini_installer() {
   local file="${arg_files[$idx]}"
   local name="${arg_names[$idx]}"
   local out_dir="$OUT_BASE/$name"
+  # See build_chrome() for why we go relative + subshell-cd.
+  local rel_out="out/$name"
 
   mkdir -p "$out_dir"
   sync_args_gn "$ARGS_DIR/$file" "$out_dir/args.gn"
 
   ensure_gn_gen "$out_dir"
 
-  echo "==> autoninja -C $out_dir mini_installer -j 15"
-  autoninja -C "$out_dir" mini_installer -j 15
+  echo "==> autoninja -C $rel_out mini_installer -j 15  (cwd=$SRC_DIR)"
+  ( cd "$SRC_DIR" && autoninja -C "$rel_out" mini_installer -j 15 )
 
   local mini_installer_path=""
   if ! mini_installer_path="$(resolve_mini_installer_path "$out_dir")"; then

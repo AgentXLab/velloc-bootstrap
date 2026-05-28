@@ -26,7 +26,7 @@
     },
     {
       "name": "nexus_browser_web",
-      "path": "./src/custom_browser/resources/patch_webui/glic"
+      "path": "./src/custom_browser/resources"
     },
     {
       "name": "claude_code",
@@ -102,7 +102,8 @@
   "mojom.enableLanguageServer": "Disabled",
   "git.ignoreLimitWarning": true,
   "chat.tools.terminal.autoApprove": {
-    "Get-Item": true
+    "Get-Item": true,
+    "ForEach-Object": true
   },
   // Used by tasks.json for integration with Chrome tests and builds.
   //
