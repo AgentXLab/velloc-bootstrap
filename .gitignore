@@ -9,10 +9,15 @@
 /.cipd/
 /.github/
 /.cursor/
+/.velloc/
+/.agent/
+/.claude/
 /cipd_bin/
 /claude_code/
 /nexus_web/
-
+/packages/
+CLAUDE.md
+VELLOC.md
 # gclient / Chromium checkout
 /src/
 
