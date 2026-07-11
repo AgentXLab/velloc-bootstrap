@@ -23,8 +23,26 @@ REPOS = {
 
 CHROME_VERSION_PATH = ROOT / "src" / "chrome" / "VERSION"
 CUSTOM_VERSION_PATH = ROOT / "src" / "custom_browser" / "VERSION"
+# Third version field: the bridge interface version — the same constant that
+# pins the /v<N> guest URL (docs/agents/nexus-interface-versioning.md).
+INTERFACE_VERSION_PATH = (
+    ROOT / "src" / "custom_browser" / "browser" / "nexus"
+    / "nexus_interface_version.h"
+)
 MANIFEST_PATH = ROOT / "release_manifest.json"
 TAG_PREFIX = "custom_browser-"
+
+# Product version scheme (mirrors
+# src/custom_browser/common/scripts/gen_product_version.py):
+#   {CUSTOM_BROWSER_MAJOR}.{chrome MAJOR}.{interface version}.{CUSTOM_BROWSER_PATCH}
+# Only MAJOR and PATCH live in custom_browser/VERSION; the middle two fields
+# are derived, so a Chromium upgrade or an interface bump changes the
+# released version without touching that file. Every field must be
+# monotonic across releases (setup.exe refuses versions that compare below
+# the installed registry pv) and <= 65535 (Windows VERSIONINFO words).
+INTERFACE_VERSION_RE = re.compile(
+    r"^#define\s+NEXUS_INTERFACE_VERSION\s+(\d+)\s*$", re.MULTILINE
+)
 
 
 class CommandError(RuntimeError):
@@ -141,6 +159,17 @@ def parse_version_file(path: Path) -> dict[str, int]:
     return data
 
 
+def read_interface_version(path: Path) -> int:
+    if not path.exists():
+        raise CommandError(f"Missing interface version header: {path}")
+    match = INTERFACE_VERSION_RE.search(path.read_text(encoding="utf-8"))
+    if not match:
+        raise CommandError(
+            f"Could not find '#define NEXUS_INTERFACE_VERSION <int>' in {path}"
+        )
+    return int(match.group(1))
+
+
 def update_version_file(path: Path, updates: dict[str, int]) -> bool:
     lines = path.read_text(encoding="utf-8").splitlines()
     changed = False
@@ -231,11 +260,13 @@ def format_tag(major: int, minor: int, build: int, patch: int) -> str:
 
 
 def prompt_choice() -> str:
+    # The chrome major and interface version are derived (chrome/VERSION and
+    # nexus_interface_version.h) — only MAJOR/PATCH are editable here.
     print("Choose how to set the tag version:")
-    print("1) Increase CUSTOM_BROWSER_BUILD")
-    print("2) Increase CUSTOM_BROWSER_PATCH")
+    print("1) Increase CUSTOM_BROWSER_PATCH")
+    print("2) Increase CUSTOM_BROWSER_MAJOR (resets PATCH to 0)")
     print("3) Keep current")
-    print("4) User input")
+    print("4) User input (MAJOR.PATCH)")
     while True:
         choice = input("Select [1-4]: ").strip()
         if choice in {"1", "2", "3", "4"}:
@@ -243,23 +274,35 @@ def prompt_choice() -> str:
         print("Invalid choice. Enter 1, 2, 3, or 4.")
 
 
-def prompt_version_input(current: dict[str, int]) -> tuple[int, int, int]:
+def prompt_version_input(current: dict[str, int]) -> tuple[int, int]:
     prompt = (
-        "Enter CUSTOM_BROWSER_MINOR.BUILD.PATCH "
-        f"(current {current['CUSTOM_BROWSER_MINOR']}."
-        f"{current['CUSTOM_BROWSER_BUILD']}."
+        "Enter CUSTOM_BROWSER_MAJOR.PATCH "
+        f"(current {current['CUSTOM_BROWSER_MAJOR']}."
         f"{current['CUSTOM_BROWSER_PATCH']}): "
     )
+    cur = (current["CUSTOM_BROWSER_MAJOR"], current["CUSTOM_BROWSER_PATCH"])
     while True:
         raw = input(prompt).strip()
         if not raw:
             print("Please enter a value.")
             continue
         parts = re.split(r"[.\s]+", raw)
-        if len(parts) != 3 or not all(re.fullmatch(r"\d+", p) for p in parts):
-            print("Expected format like 1.2.3 or '1 2 3'.")
+        if len(parts) != 2 or not all(re.fullmatch(r"\d+", p) for p in parts):
+            print("Expected format like 1.2 or '1 2'.")
             continue
-        return (int(parts[0]), int(parts[1]), int(parts[2]))
+        entered = (int(parts[0]), int(parts[1]))
+        if any(v > 65535 for v in entered):
+            # Packed Windows VERSIONINFO / NSIS VIProductVersion words.
+            print("Each field must be <= 65535.")
+            continue
+        if entered < cur and not prompt_yes_no(
+            f"{entered[0]}.{entered[1]} is LOWER than the current "
+            f"{cur[0]}.{cur[1]} — installed clients will refuse it as a "
+            "downgrade (HIGHER_VERSION_EXISTS). Continue anyway?",
+            default_no=True,
+        ):
+            continue
+        return entered
 
 
 def prompt_yes_no(question: str, default_no: bool = True) -> bool:
@@ -293,9 +336,9 @@ def write_manifest(
         "tag": tag,
         "created_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "versions": {
-            "chrome_major": major,
-            "custom_browser_minor": minor,
-            "custom_browser_build": build,
+            "custom_browser_major": major,
+            "chrome_major": minor,
+            "interface_version": build,
             "custom_browser_patch": patch,
         },
         "repos": [
@@ -331,25 +374,46 @@ def create_release(args: argparse.Namespace) -> None:
 
     if "MAJOR" not in chrome_version:
         raise CommandError(f"Missing MAJOR in {CHROME_VERSION_PATH}")
-    for key in ("CUSTOM_BROWSER_MINOR", "CUSTOM_BROWSER_BUILD", "CUSTOM_BROWSER_PATCH"):
+    for key in ("CUSTOM_BROWSER_MAJOR", "CUSTOM_BROWSER_PATCH"):
         if key not in custom_version:
             raise CommandError(f"Missing {key} in {CUSTOM_VERSION_PATH}")
+    # A 4-key VERSION file means the src/custom_browser checkout predates the
+    # composed scheme: its gen_product_version.py would stamp the binary with
+    # the OLD composition while this script tags the NEW one — a silent
+    # tag/binary mismatch. Refuse instead.
+    legacy_keys = [
+        key for key in ("CUSTOM_BROWSER_MINOR", "CUSTOM_BROWSER_BUILD")
+        if key in custom_version
+    ]
+    if legacy_keys:
+        raise CommandError(
+            f"{CUSTOM_VERSION_PATH} still has legacy keys "
+            f"({', '.join(legacy_keys)}) — the src/custom_browser checkout "
+            "predates the composed version scheme "
+            "({MAJOR}.{chrome MAJOR}.{interface}.{PATCH}). Update the "
+            "checkout before tagging."
+        )
 
-    major = chrome_version["MAJOR"]
-    minor = custom_version["CUSTOM_BROWSER_MINOR"]
-    build = custom_version["CUSTOM_BROWSER_BUILD"]
+    # Positional fields of the product version (see scheme note at top):
+    # major = product generation, minor slot = chrome major (derived),
+    # build slot = bridge interface version (derived), patch = release fix.
+    major = custom_version["CUSTOM_BROWSER_MAJOR"]
+    minor = chrome_version["MAJOR"]
+    build = read_interface_version(INTERFACE_VERSION_PATH)
     patch = custom_version["CUSTOM_BROWSER_PATCH"]
 
     print(f"Current version: {major}.{minor}.{build}.{patch}")
+    print(f"  (chrome major {minor} and interface version {build} are derived)")
     print(f"Current tag: {format_tag(major, minor, build, patch)}")
 
     choice = prompt_choice()
     if choice == "1":
-        build += 1
-    elif choice == "2":
         patch += 1
+    elif choice == "2":
+        major += 1
+        patch = 0
     elif choice == "4":
-        minor, build, patch = prompt_version_input(custom_version)
+        major, patch = prompt_version_input(custom_version)
 
     tag = format_tag(major, minor, build, patch)
     print(f"Proposed tag: {tag}")
@@ -370,8 +434,7 @@ def create_release(args: argparse.Namespace) -> None:
     version_updated = update_version_file(
         CUSTOM_VERSION_PATH,
         {
-            "CUSTOM_BROWSER_MINOR": minor,
-            "CUSTOM_BROWSER_BUILD": build,
+            "CUSTOM_BROWSER_MAJOR": major,
             "CUSTOM_BROWSER_PATCH": patch,
         },
     )
