@@ -23,26 +23,20 @@ REPOS = {
 
 CHROME_VERSION_PATH = ROOT / "src" / "chrome" / "VERSION"
 CUSTOM_VERSION_PATH = ROOT / "src" / "custom_browser" / "VERSION"
-# Third version field: the bridge interface version — the same constant that
-# pins the /v<N> guest URL (docs/agents/nexus-interface-versioning.md).
-INTERFACE_VERSION_PATH = (
-    ROOT / "src" / "custom_browser" / "browser" / "nexus"
-    / "nexus_interface_version.h"
-)
 MANIFEST_PATH = ROOT / "release_manifest.json"
 TAG_PREFIX = "custom_browser-"
 
 # Product version scheme (mirrors
 # src/custom_browser/common/scripts/gen_product_version.py):
 #   {CUSTOM_BROWSER_MAJOR}.{chrome MAJOR}.{interface version}.{CUSTOM_BROWSER_PATCH}
-# Only MAJOR and PATCH live in custom_browser/VERSION; the middle two fields
-# are derived, so a Chromium upgrade or an interface bump changes the
-# released version without touching that file. Every field must be
-# monotonic across releases (setup.exe refuses versions that compare below
-# the installed registry pv) and <= 65535 (Windows VERSIONINFO words).
-INTERFACE_VERSION_RE = re.compile(
-    r"^#define\s+NEXUS_INTERFACE_VERSION\s+(\d+)\s*$", re.MULTILINE
-)
+# MAJOR, PATCH, and NEXUS_INTERFACE_VERSION (the /v<N> guest-URL pin — see
+# docs/agents/nexus-interface-versioning.md; bumped only on bridge-contract
+# changes, followed by check_interface_version.py --sync) all live in
+# custom_browser/VERSION; the chrome major is derived, so a Chromium
+# upgrade changes the released version without touching that file. Every
+# field must be monotonic across releases (setup.exe refuses versions that
+# compare below the installed registry pv) and <= 65535 (Windows
+# VERSIONINFO words).
 
 
 class CommandError(RuntimeError):
@@ -157,17 +151,6 @@ def parse_version_file(path: Path) -> dict[str, int]:
             raise CommandError(f"Non-numeric value in {path}: {raw}")
         data[key] = int(value)
     return data
-
-
-def read_interface_version(path: Path) -> int:
-    if not path.exists():
-        raise CommandError(f"Missing interface version header: {path}")
-    match = INTERFACE_VERSION_RE.search(path.read_text(encoding="utf-8"))
-    if not match:
-        raise CommandError(
-            f"Could not find '#define NEXUS_INTERFACE_VERSION <int>' in {path}"
-        )
-    return int(match.group(1))
 
 
 def update_version_file(path: Path, updates: dict[str, int]) -> bool:
@@ -381,7 +364,8 @@ def create_release(args: argparse.Namespace) -> None:
 
     if "MAJOR" not in chrome_version:
         raise CommandError(f"Missing MAJOR in {CHROME_VERSION_PATH}")
-    for key in ("CUSTOM_BROWSER_MAJOR", "CUSTOM_BROWSER_PATCH"):
+    for key in ("CUSTOM_BROWSER_MAJOR", "NEXUS_INTERFACE_VERSION",
+                "CUSTOM_BROWSER_PATCH"):
         if key not in custom_version:
             raise CommandError(f"Missing {key} in {CUSTOM_VERSION_PATH}")
     # A 4-key VERSION file means the src/custom_browser checkout predates the
@@ -403,14 +387,15 @@ def create_release(args: argparse.Namespace) -> None:
 
     # Positional fields of the product version (see scheme note at top):
     # major = product generation, minor slot = chrome major (derived),
-    # build slot = bridge interface version (derived), patch = release fix.
+    # build slot = bridge interface version, patch = release fix.
     major = custom_version["CUSTOM_BROWSER_MAJOR"]
     minor = chrome_version["MAJOR"]
-    build = read_interface_version(INTERFACE_VERSION_PATH)
+    build = custom_version["NEXUS_INTERFACE_VERSION"]
     patch = custom_version["CUSTOM_BROWSER_PATCH"]
 
     print(f"Current version: {major}.{minor}.{build}.{patch}")
-    print(f"  (chrome major {minor} and interface version {build} are derived)")
+    print(f"  (chrome major {minor} is derived; interface version {build} "
+          "comes from VERSION and bumps only on bridge-contract changes)")
     print(f"Current tag: {format_tag(major, minor, build, patch)}")
 
     choice = prompt_choice()
