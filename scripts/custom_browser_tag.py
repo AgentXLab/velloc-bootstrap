@@ -295,6 +295,13 @@ def prompt_version_input(current: dict[str, int]) -> tuple[int, int]:
             # Packed Windows VERSIONINFO / NSIS VIProductVersion words.
             print("Each field must be <= 65535.")
             continue
+        if entered[0] >= 100:
+            # The NSIS wrapper detects legacy {chromium major}-first installs
+            # by "first field >= 100" (custom_browser_installer_wrapper.nsi);
+            # a 3-digit product major would be auto-uninstalled as legacy.
+            print("CUSTOM_BROWSER_MAJOR must stay below 100 "
+                  "(legacy-scheme detection in the installer wrapper).")
+            continue
         if entered < cur and not prompt_yes_no(
             f"{entered[0]}.{entered[1]} is LOWER than the current "
             f"{cur[0]}.{cur[1]} — installed clients will refuse it as a "
