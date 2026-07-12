@@ -544,6 +544,80 @@ run_nexus_webui_tests() {
   fi
 }
 
+deploy_nexus_web() {
+  local web_dir="$WORKSPACE_DIR/nexus_web"
+
+  if [ ! -d "$web_dir" ]; then
+    echo "ERROR: nexus_web/ not found at $web_dir."
+    return 1
+  fi
+  if ! command -v npm >/dev/null 2>&1; then
+    echo "ERROR: npm not found in PATH."
+    return 1
+  fi
+
+  # Cloudflare's git-connected build deploys main only; a snapshot commit on
+  # another branch would not go live and could later collide on merge.
+  local branch=""
+  branch="$(git -C "$web_dir" rev-parse --abbrev-ref HEAD)"
+  if [ "$branch" != "main" ]; then
+    echo "ERROR: nexus_web is on branch '$branch'; Cloudflare deploys main only. Switch to main first."
+    return 1
+  fi
+
+  # The snapshot is built from the working tree — uncommitted source edits
+  # would ship without a matching src commit in history.
+  if git -C "$web_dir" status --porcelain -uno | grep -qv -E '^.{3}deploy/'; then
+    echo "WARNING: nexus_web has uncommitted tracked changes outside deploy/:"
+    git -C "$web_dir" status --porcelain -uno | grep -v -E '^.{3}deploy/'
+    read -r -p "They will be baked into the deployed snapshot. Continue? [y/N]: " confirm
+    if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
+      echo "Aborted."
+      return 1
+    fi
+  fi
+
+  echo "==> npm run snapshot:update  (cwd=$web_dir)"
+  if ! ( cd "$web_dir" && npm run snapshot:update ); then
+    echo "ERROR: snapshot:update failed."
+    return 1
+  fi
+
+  if ! git -C "$web_dir" status --porcelain -- deploy/ | grep -q .; then
+    echo "deploy/ snapshot unchanged — live site already matches source; nothing to commit."
+    return 0
+  fi
+
+  git -C "$web_dir" add deploy/
+  echo "==> git commit (deploy/ snapshot refresh)"
+  if ! git -C "$web_dir" commit -m "deploy: refresh versioned snapshot (build menu auto-deploy)"; then
+    echo "ERROR: git commit failed."
+    return 1
+  fi
+
+  echo "==> git push origin main"
+  if ! git -C "$web_dir" push origin main; then
+    echo "ERROR: git push failed — snapshot commit is local only; push manually."
+    return 1
+  fi
+
+  echo "Pushed. Cloudflare Workers Build compiles the current version fresh"
+  echo "and serves it at /v<N>/; the committed snapshot is the asset-retention"
+  echo "baseline for open sessions. Allow a few minutes (plus the 5-minute"
+  echo "index.html edge cache), then use Reload Runtime in the about page."
+}
+
+bump_nexus_interface_version() {
+  local web_dir="$WORKSPACE_DIR/nexus_web"
+  if [ ! -d "$web_dir" ]; then
+    echo "ERROR: nexus_web/ not found at $web_dir."
+    return 1
+  fi
+  # Freezes /v<N>/, bumps the TS constant, snapshots /v<N+1>/, commits both,
+  # and patches (not commits) the C++ header. Run BEFORE contract changes.
+  ( cd "$web_dir" && npm run version:bump )
+}
+
 while true; do
   echo "==> Build options:"
   for i in "${!arg_names[@]}"; do
@@ -554,12 +628,16 @@ while true; do
   menu_release_tag=$(( ${#arg_names[@]} + 3 ))
   menu_nexus_tests=$(( ${#arg_names[@]} + 4 ))
   menu_nexus_webui_tests=$(( ${#arg_names[@]} + 5 ))
-  menu_exit=$(( ${#arg_names[@]} + 6 ))
+  menu_deploy_nexus_web=$(( ${#arg_names[@]} + 6 ))
+  menu_bump_nexus_interface=$(( ${#arg_names[@]} + 7 ))
+  menu_exit=$(( ${#arg_names[@]} + 8 ))
   printf "%2d) Build mini_installer\n" "$menu_build_mini"
   printf "%2d) Reinstall Velloc NSIS\n" "$menu_reinstall_nsis"
   printf "%2d) Release/tag custom browser\n" "$menu_release_tag"
   printf "%2d) Run nexus unit tests (C++)\n" "$menu_nexus_tests"
   printf "%2d) Run nexus WebUI tests (TS, via vitest)\n" "$menu_nexus_webui_tests"
+  printf "%2d) Deploy nexus_web (snapshot + commit + push)\n" "$menu_deploy_nexus_web"
+  printf "%2d) Bump nexus interface version (freeze + bump + snapshot)\n" "$menu_bump_nexus_interface"
   printf "%2d) Exit\n" "$menu_exit"
 
   read -r -p "Select option [1-$menu_exit] (default: $last_choice): " choice
@@ -573,6 +651,10 @@ while true; do
   if [ "$choice" -eq "$menu_exit" ]; then
     echo "Exiting."
     break
+  elif [ "$choice" -eq "$menu_bump_nexus_interface" ]; then
+    bump_nexus_interface_version
+  elif [ "$choice" -eq "$menu_deploy_nexus_web" ]; then
+    deploy_nexus_web
   elif [ "$choice" -eq "$menu_nexus_webui_tests" ]; then
     run_nexus_webui_tests
   elif [ "$choice" -eq "$menu_nexus_tests" ]; then

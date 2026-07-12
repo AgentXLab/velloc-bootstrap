@@ -24,7 +24,7 @@ REPOS = {
 CHROME_VERSION_PATH = ROOT / "src" / "chrome" / "VERSION"
 CUSTOM_VERSION_PATH = ROOT / "src" / "custom_browser" / "VERSION"
 MANIFEST_PATH = ROOT / "release_manifest.json"
-TAG_PREFIX = "custom_browser-"
+TAG_PREFIX = "velloc-"
 
 # Product version scheme (mirrors
 # src/custom_browser/common/scripts/gen_product_version.py):
