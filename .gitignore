@@ -32,3 +32,6 @@ nul
 # Node / Playwright (root-level runs)
 node_modules/
 test-results/
+
+# Local code-signing config (see signing.example.env)
+signing.local.env

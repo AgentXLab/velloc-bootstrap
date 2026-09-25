@@ -143,6 +143,10 @@ VELLOC_NSIS_INSTALLER_PATH=""
 
 ensure_gn_available
 
+# shellcheck source=installer_signing.sh
+. "$WORKSPACE_DIR/installer_signing.sh"
+velloc_sign_load_config
+
 ensure_makensis_available() {
   if command -v makensis >/dev/null 2>&1; then
     return 0
@@ -323,6 +327,20 @@ build_velloc_mini_installer() {
   echo "==> autoninja -C $rel_out mini_installer -j 15  (cwd=$SRC_DIR)"
   ( cd "$SRC_DIR" && autoninja -C "$rel_out" mini_installer -j 15 )
 
+  # Sign what the installer ships (chrome.exe, chrome.dll, setup.exe, ...),
+  # then rebuild: the signed files are newer than chrome.7z / setup.ex_, so
+  # ninja repacks them without relinking anything. An incremental build
+  # relinks unsigned copies, which is why this runs on every signed package.
+  if velloc_sign_enabled; then
+    velloc_sign_payload "$SRC_DIR/chrome/installer/mini_installer/chrome.release" "$out_dir"
+    echo "==> autoninja -C $rel_out mini_installer -j 15  (repack signed payload)"
+    ( cd "$SRC_DIR" && autoninja -C "$rel_out" mini_installer -j 15 )
+    if [ "$out_dir/chrome.7z" -ot "$out_dir/chrome.dll" ]; then
+      echo "ERROR: chrome.7z is older than the signed chrome.dll; the payload was not repacked."
+      return 1
+    fi
+  fi
+
   local mini_installer_path=""
   if ! mini_installer_path="$(resolve_mini_installer_path "$out_dir")"; then
     return 1
@@ -338,6 +356,12 @@ build_velloc_mini_installer() {
 
   VELLOC_MINI_INSTALLER_PATH="$mini_installer_path"
   VELLOC_SETUP_EXE="$setup_exe"
+
+  # The NSIS wrapper embeds mini_installer.exe and runs it on the user's
+  # machine, so it is signed before makensis packs it.
+  if velloc_sign_enabled; then
+    velloc_sign_file "$mini_installer_path"
+  fi
 }
 
 build_velloc_nsis_installer() {
@@ -379,6 +403,10 @@ build_velloc_nsis_installer() {
   if [ ! -f "$output_path" ]; then
     echo "ERROR: NSIS output not found at $output_path."
     return 1
+  fi
+
+  if velloc_sign_enabled; then
+    velloc_sign_file "$output_path"
   fi
 
   VELLOC_NSIS_INSTALLER_PATH="$output_path"
@@ -446,6 +474,9 @@ run_nsis_installer() {
 
 reinstall_velloc_nsis() {
   echo "==> Reinstall Velloc NSIS"
+  if velloc_sign_enabled; then
+    velloc_sign_check_config
+  fi
   build_velloc_mini_installer
   build_velloc_nsis_installer "$VELLOC_MINI_INSTALLER_PATH"
 
@@ -456,16 +487,53 @@ reinstall_velloc_nsis() {
   fi
 }
 
+# Build the release package without touching the local install:
+#   build.sh package [--sign | --no-sign]
+#   build.sh reinstall [--sign | --no-sign]
+# --sign / --no-sign override VELLOC_SIGN for this run. No arguments = menu.
+package_velloc_nsis() {
+  echo "==> Package Velloc NSIS"
+  if velloc_sign_enabled; then
+    velloc_sign_check_config
+  else
+    echo "==> Signing OFF (pass --sign or set VELLOC_SIGN=1 to sign)"
+  fi
+  build_velloc_mini_installer
+  build_velloc_nsis_installer "$VELLOC_MINI_INSTALLER_PATH"
+  echo "==> Package: $VELLOC_NSIS_INSTALLER_PATH"
+}
+
+if [ "$#" -gt 0 ]; then
+  command_name="$1"
+  shift
+  for flag in "$@"; do
+    case "$flag" in
+      --sign) VELLOC_SIGN=1 ;;
+      --no-sign) VELLOC_SIGN=0 ;;
+      *) echo "ERROR: unknown option: $flag"; exit 1 ;;
+    esac
+  done
+  case "$command_name" in
+    package) package_velloc_nsis ;;
+    reinstall) reinstall_velloc_nsis ;;
+    *) echo "Usage: build.sh [package|reinstall] [--sign|--no-sign]"; exit 1 ;;
+  esac
+  exit 0
+fi
+
 while true; do
   echo "==> Build options:"
   for i in "${!arg_names[@]}"; do
     printf "%2d) Build %s\n" $((i + 1)) "${arg_names[$i]}"
   done
+  if velloc_sign_enabled; then sign_label="signed"; else sign_label="unsigned"; fi
   menu_build_mini=$(( ${#arg_names[@]} + 1 ))
   menu_reinstall_nsis=$(( ${#arg_names[@]} + 2 ))
-  menu_exit=$(( ${#arg_names[@]} + 3 ))
+  menu_package_nsis=$(( ${#arg_names[@]} + 3 ))
+  menu_exit=$(( ${#arg_names[@]} + 4 ))
   printf "%2d) Build mini_installer\n" "$menu_build_mini"
-  printf "%2d) Reinstall Velloc NSIS\n" "$menu_reinstall_nsis"
+  printf "%2d) Reinstall Velloc NSIS (%s)\n" "$menu_reinstall_nsis" "$sign_label"
+  printf "%2d) Package Velloc NSIS, no install (%s)\n" "$menu_package_nsis" "$sign_label"
   printf "%2d) Exit\n" "$menu_exit"
 
   read -r -p "Select option [1-$menu_exit] (default: $last_choice): " choice
@@ -481,6 +549,8 @@ while true; do
     break
   elif [ "$choice" -eq "$menu_reinstall_nsis" ]; then
     reinstall_velloc_nsis
+  elif [ "$choice" -eq "$menu_package_nsis" ]; then
+    package_velloc_nsis
   elif [ "$choice" -eq "$menu_build_mini" ]; then
     build_mini_installer
   else
