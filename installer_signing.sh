@@ -22,8 +22,14 @@ VELLOC_SIGN_METADATA=""
 velloc_sign_load_config() {
   local config="${VELLOC_SIGN_CONFIG:-$WORKSPACE_DIR/signing.local.env}"
   if [ -f "$config" ]; then
+    # The environment outranks the file for the on/off switch, so
+    # `VELLOC_SIGN=1 ./build.sh` works with a copied example (VELLOC_SIGN=0).
+    local env_sign="${VELLOC_SIGN-}" env_sign_set="${VELLOC_SIGN+x}"
     # shellcheck disable=SC1090
     . "$config"
+    if [ -n "$env_sign_set" ]; then
+      VELLOC_SIGN="$env_sign"
+    fi
   fi
 }
 

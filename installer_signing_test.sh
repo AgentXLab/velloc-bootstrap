@@ -67,6 +67,17 @@ case_config_file() {
 }
 run_case case_config_file && pass "signing.local.env is loaded" || fail "signing.local.env is loaded"
 
+case_env_beats_config() {
+  VELLOC_SIGN=1
+  VELLOC_SIGN_CONFIG="$TMP/signing.local.env"
+  printf 'VELLOC_SIGN=0
+VELLOC_SIGN_ACCOUNT=from-file
+' >"$VELLOC_SIGN_CONFIG"
+  velloc_sign_load_config
+  velloc_sign_enabled && [ "$VELLOC_SIGN_ACCOUNT" = from-file ]
+}
+run_case case_env_beats_config && pass "env VELLOC_SIGN outranks the file" || fail "env VELLOC_SIGN outranks the file"
+
 case_config_absent() { velloc_sign_load_config; ! velloc_sign_enabled; }
 run_case case_config_absent && pass "missing config file is not an error" || fail "missing config file is not an error"
 
