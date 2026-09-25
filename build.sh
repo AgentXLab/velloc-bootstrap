@@ -328,17 +328,12 @@ build_velloc_mini_installer() {
   ( cd "$SRC_DIR" && autoninja -C "$rel_out" mini_installer -j 15 )
 
   # Sign what the installer ships (chrome.exe, chrome.dll, setup.exe, ...),
-  # then rebuild: the signed files are newer than chrome.7z / setup.ex_, so
-  # ninja repacks them without relinking anything. An incremental build
-  # relinks unsigned copies, which is why this runs on every signed package.
+  # then re-pack it without ninja: siso treats the signed binaries as
+  # modified outputs and relinks them, which would pack unsigned copies.
   if velloc_sign_enabled; then
-    velloc_sign_payload "$SRC_DIR/chrome/installer/mini_installer/chrome.release" "$out_dir"
-    echo "==> autoninja -C $rel_out mini_installer -j 15  (repack signed payload)"
-    ( cd "$SRC_DIR" && autoninja -C "$rel_out" mini_installer -j 15 )
-    if [ "$out_dir/chrome.7z" -ot "$out_dir/chrome.dll" ]; then
-      echo "ERROR: chrome.7z is older than the signed chrome.dll; the payload was not repacked."
-      return 1
-    fi
+    velloc_sign_payload "$SRC_DIR/chrome/installer/mini_installer/chrome.release" "$out_dir" || return 1
+    velloc_sign_repack "$out_dir" || return 1
+    velloc_sign_verify_packed "$out_dir" || return 1
   fi
 
   local mini_installer_path=""

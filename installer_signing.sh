@@ -18,6 +18,7 @@
 # (or AZURE_CLIENT_ID / AZURE_TENANT_ID / AZURE_CLIENT_SECRET).
 
 VELLOC_SIGN_METADATA=""
+VELLOC_SIGN_HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 velloc_sign_load_config() {
   local config="${VELLOC_SIGN_CONFIG:-$WORKSPACE_DIR/signing.local.env}"
@@ -170,8 +171,9 @@ velloc_sign_is_signed() {
 }
 
 # Signs every unsigned payload binary plus setup.exe (packed separately as
-# setup.ex_). Run between building mini_installer and rebuilding it: the
-# signed files are newer than chrome.7z, so the rebuild repacks them.
+# setup.ex_). Run after building mini_installer, then velloc_sign_repack —
+# never a second ninja run: siso sees the signed binaries as modified outputs
+# and relinks them, stripping the signatures before they are packed.
 velloc_sign_payload() {
   local release_file="$1"
   local out_dir="$2"
@@ -197,4 +199,83 @@ velloc_sign_payload() {
     signed=$((signed + 1))
   done
   echo "==> Payload: signed $signed, already signed $skipped"
+}
+
+# Prints the mini_installer_archive action's command, read from the out dir's
+# ninja files with its '$:' / '$ ' escapes undone — the exact create_installer_archive.py call the
+# build makes, so a repack cannot drift from what ninja would pack.
+velloc_sign_archive_command() {
+  local out_dir="$1"
+  local cmd
+  cmd="$(grep -h -A1 '^rule __chrome_installer_mini_installer_mini_installer_archive___'     "$out_dir"/*.ninja 2>/dev/null | sed -n 's/^  command = //p' | head -n 1)"
+  if [ -z "$cmd" ]; then
+    echo "ERROR: mini_installer_archive rule not found in $out_dir/*.ninja." >&2
+    return 1
+  fi
+  cmd="${cmd//'$:'/:}"
+  cmd="${cmd//'$ '/ }"
+  printf '%s
+' "$cmd"
+}
+
+# The archive staging dir (--staging_dir of the archive command, relative to
+# the out dir) plus the temp_installer_archive/ the script packs from.
+velloc_sign_staging_dir() {
+  local out_dir="$1" cmd rest
+  cmd="$(velloc_sign_archive_command "$out_dir")" || return 1
+  rest="${cmd#*--staging_dir }"
+  if [ "$rest" = "$cmd" ]; then
+    echo "ERROR: archive command has no --staging_dir." >&2
+    return 1
+  fi
+  echo "$out_dir/${rest%% *}/temp_installer_archive"
+}
+
+# Re-packs the signed payload without ninja: re-runs the archive action
+# (chrome.7z, chrome.packed.7z, setup.ex_ from the now-signed binaries) and
+# swaps the new archives into the already-linked mini_installer.exe.
+velloc_sign_repack() {
+  local out_dir="$1"
+  local cmd python
+  cmd="$(velloc_sign_archive_command "$out_dir")" || return 1
+  python="${cmd%% *}"
+  echo "==> Repack signed payload: create_installer_archive.py"
+  ( cd "$out_dir" && eval "$cmd" ) || {
+    echo "ERROR: create_installer_archive.py failed."
+    return 1
+  }
+  echo "==> Repack signed payload: mini_installer.exe resources"
+  "$python" "$VELLOC_SIGN_HERE/installer_update_resources.py"     "$(velloc_sign_win_path "$out_dir/mini_installer.exe")"     "B7=chrome.packed.7z=$(velloc_sign_win_path "$out_dir/chrome.packed.7z")"     "BL=setup.ex_=$(velloc_sign_win_path "$out_dir/setup.ex_")" || {
+    echo "ERROR: replacing the mini_installer.exe payload failed."
+    return 1
+  }
+}
+
+# Proves the packed payload is signed: every .exe/.dll the archive was staged
+# from, plus setup.exe, must verify. Runs after velloc_sign_repack, so an
+# unsigned binary here is exactly an unsigned binary in the installer.
+velloc_sign_verify_packed() {
+  local out_dir="$1"
+  local staging file bad=0 count=0
+  staging="$(velloc_sign_staging_dir "$out_dir")" || return 1
+  if [ ! -d "$staging" ]; then
+    echo "ERROR: archive staging dir not found: $staging"
+    return 1
+  fi
+  while IFS= read -r file; do
+    count=$((count + 1))
+    if ! velloc_sign_is_signed "$file"; then
+      echo "ERROR: packed but unsigned: $file"
+      bad=$((bad + 1))
+    fi
+  done < <(find "$staging" "$out_dir/setup.exe" -type f \( -iname '*.exe' -o -iname '*.dll' \))
+  if [ "$count" -eq 0 ]; then
+    echo "ERROR: no packed binaries found under $staging."
+    return 1
+  fi
+  if [ "$bad" -ne 0 ]; then
+    echo "ERROR: $bad of $count packed binaries are unsigned."
+    return 1
+  fi
+  echo "==> Packed payload: $count binaries, all signed"
 }

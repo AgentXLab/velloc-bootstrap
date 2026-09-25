@@ -233,7 +233,110 @@ case_sign_payload_empty() {
 }
 run_case case_sign_payload_empty && pass "empty payload fails" || fail "empty payload fails"
 
-# 8. build.sh still parses with the wiring in place.
+# 8. Re-pack without ninja. The archive command comes from the out dir's
+# ninja files, unescaped.
+make_ninja_fixture() {
+  NINJA_OUT="$TMP/ninja_out"
+  rm -rf "$NINJA_OUT"
+  mkdir -p "$NINJA_OUT/gen/mi/temp_installer_archive/Chrome-bin/1.0"
+  FAKE_PY="$TMP/fake_python.sh"
+  cat >"$FAKE_PY" <<'EOF'
+#!/usr/bin/env bash
+echo "$(basename "$PWD"): $*" >>"$FAKE_PY_LOG"
+exit "${FAKE_PY_EXIT:-0}"
+EOF
+  chmod +x "$FAKE_PY"
+  export FAKE_PY_LOG="$TMP/fake_py.log"
+  rm -f "$FAKE_PY_LOG"
+  printf '%s\n' \
+    'rule __other_rule' \
+    '  command = nope' \
+    'rule __chrome_installer_mini_installer_mini_installer_archive___build_toolchain_win_win_clang_x64__rule' \
+    "  command = $FAKE_PY archive.py --build_dir . --staging_dir gen/mi --drive D\$:/x" \
+    '  description = ACTION' >"$NINJA_OUT/toolchain.ninja"
+}
+
+case_archive_command() {
+  make_ninja_fixture
+  local got
+  got="$(velloc_sign_archive_command "$NINJA_OUT")" || return 1
+  [ "$got" = "$FAKE_PY archive.py --build_dir . --staging_dir gen/mi --drive D:/x" ] || { echo "got: $got"; return 1; }
+  [ "$(velloc_sign_staging_dir "$NINJA_OUT")" = "$NINJA_OUT/gen/mi/temp_installer_archive" ]
+}
+run_case case_archive_command && pass "archive command read from ninja" || fail "archive command read from ninja"
+
+case_archive_command_missing() {
+  mkdir -p "$TMP/no_ninja"
+  ! velloc_sign_archive_command "$TMP/no_ninja" 2>/dev/null
+}
+run_case case_archive_command_missing && pass "missing archive rule fails" || fail "missing archive rule fails"
+
+# Runs the archive action in the out dir, then swaps both archives into
+# mini_installer.exe — and never touches ninja.
+case_repack() {
+  make_ninja_fixture
+  velloc_sign_repack "$NINJA_OUT" >/dev/null || return 1
+  local first second
+  first="$(sed -n 1p "$FAKE_PY_LOG")"
+  second="$(sed -n 2p "$FAKE_PY_LOG")"
+  [[ "$first" == "ninja_out: archive.py --build_dir . --staging_dir gen/mi"* ]] || { echo "1: $first"; return 1; }
+  [[ "$second" == *"installer_update_resources.py "*"mini_installer.exe B7=chrome.packed.7z="*"chrome.packed.7z BL=setup.ex_="*"setup.ex_" ]] || { echo "2: $second"; return 1; }
+  [ "$(wc -l <"$FAKE_PY_LOG")" -eq 2 ]
+}
+run_case case_repack && pass "repack runs archive then resource swap" || fail "repack runs archive then resource swap"
+
+case_repack_fails() {
+  make_ninja_fixture
+  ! FAKE_PY_EXIT=1 velloc_sign_repack "$NINJA_OUT" >/dev/null
+}
+run_case case_repack_fails && pass "archive failure propagates" || fail "archive failure propagates"
+
+# The guard that pins the shipped bug: a packed binary without a signature
+# fails the package instead of shipping.
+make_packed_fixture() {
+  make_ninja_fixture
+  local bin="$NINJA_OUT/gen/mi/temp_installer_archive/Chrome-bin"
+  touch "$bin/chrome.exe" "$bin/1.0/chrome.dll" "$bin/1.0/resources.pak" "$NINJA_OUT/setup.exe"
+  configure
+  export STUB_SIGNED="$TMP/packed_signed.txt"
+  : >"$STUB_SIGNED"
+  local f
+  for f in "$bin/chrome.exe" "$bin/1.0/chrome.dll" "$NINJA_OUT/setup.exe"; do
+    velloc_sign_win_path "$f" >>"$STUB_SIGNED"
+  done
+}
+
+case_verify_packed() {
+  make_packed_fixture
+  local out
+  out="$(velloc_sign_verify_packed "$NINJA_OUT")" || { echo "$out"; return 1; }
+  [[ "$out" == *"3 binaries, all signed"* ]] || { echo "$out"; return 1; }
+}
+run_case case_verify_packed && pass "signed packed payload passes" || fail "signed packed payload passes"
+
+case_verify_packed_unsigned() {
+  make_packed_fixture
+  grep -v 'chrome.dll$' "$STUB_SIGNED" >"$STUB_SIGNED.tmp" && mv "$STUB_SIGNED.tmp" "$STUB_SIGNED"
+  local out
+  out="$(velloc_sign_verify_packed "$NINJA_OUT")" && { echo "$out"; return 1; }
+  [[ "$out" == *"packed but unsigned: "*"chrome.dll"* ]] || { echo "$out"; return 1; }
+}
+run_case case_verify_packed_unsigned && pass "unsigned packed binary fails" || fail "unsigned packed binary fails"
+
+# build.sh must not re-run ninja to repack: siso relinks the signed binaries.
+case_build_wiring() {
+  local body
+  body="$(sed -n '/^build_velloc_mini_installer() {/,/^}/p' "$HERE/build.sh")"
+  [[ "$body" == *"velloc_sign_repack"* && "$body" == *"velloc_sign_verify_packed"* ]] || return 1
+  [ "$(grep -c 'autoninja' <<<"$body")" -le 2 ]
+}
+run_case case_build_wiring && pass "build.sh repacks without ninja" || fail "build.sh repacks without ninja"
+
+# 9. The resource swap itself, against a real PE file.
+python "$HERE/installer_update_resources_test.py" >/dev/null 2>&1 \
+  && pass "installer_update_resources.py" || fail "installer_update_resources.py"
+
+# 10. build.sh still parses with the wiring in place.
 bash -n "$HERE/build.sh" && pass "build.sh parses" || fail "build.sh parses"
 
 if [ "$failures" -gt 0 ]; then
