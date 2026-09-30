@@ -491,7 +491,7 @@ package_velloc_nsis() {
   if velloc_sign_enabled; then
     velloc_sign_check_config
   else
-    echo "==> Signing OFF (pass --sign or set VELLOC_SIGN=1 to sign)"
+    echo "==> Signing OFF (--no-sign / VELLOC_SIGN=0); this package is UNSIGNED"
   fi
   build_velloc_mini_installer
   build_velloc_nsis_installer "$VELLOC_MINI_INSTALLER_PATH"

@@ -2,9 +2,10 @@
 # (Artifact Signing). Sourced by build.sh; installer_signing_test.sh
 # exercises it against a stub signtool.
 #
-# OFF by default: an unsigned package is still the normal output until the
-# signing identity is validated. Turn it on with `build.sh package --sign`,
-# or VELLOC_SIGN=1 in the environment / in signing.local.env.
+# ON by default: every package and reinstall is signed, and a missing or
+# incomplete configuration fails the build rather than shipping unsigned.
+# Opt out per run with `build.sh package --no-sign`, or VELLOC_SIGN=0 in the
+# environment / in signing.local.env.
 #
 # Configuration (environment, or signing.local.env in the workspace root —
 # gitignored; copy signing.example.env):
@@ -24,7 +25,7 @@ velloc_sign_load_config() {
   local config="${VELLOC_SIGN_CONFIG:-$WORKSPACE_DIR/signing.local.env}"
   if [ -f "$config" ]; then
     # The environment outranks the file for the on/off switch, so
-    # `VELLOC_SIGN=1 ./build.sh` works with a copied example (VELLOC_SIGN=0).
+    # `VELLOC_SIGN=0 ./build.sh` works with a copied example (VELLOC_SIGN=1).
     local env_sign="${VELLOC_SIGN-}" env_sign_set="${VELLOC_SIGN+x}"
     # shellcheck disable=SC1090
     . "$config"
@@ -35,7 +36,7 @@ velloc_sign_load_config() {
 }
 
 velloc_sign_enabled() {
-  [ "${VELLOC_SIGN:-0}" = "1" ]
+  [ "${VELLOC_SIGN:-1}" = "1" ]
 }
 
 velloc_sign_win_path() {

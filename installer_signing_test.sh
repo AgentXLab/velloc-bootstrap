@@ -51,12 +51,12 @@ configure() {
   VELLOC_SIGNTOOL="$STUB"
 }
 
-# 1. Signing is off unless asked for — the unsigned package stays the default.
-case_default_off() { ! velloc_sign_enabled; }
-run_case case_default_off && pass "signing off by default" || fail "signing off by default"
+# 1. Signing is on unless opted out — a signed package is the default.
+case_default_on() { velloc_sign_enabled; }
+run_case case_default_on && pass "signing on by default" || fail "signing on by default"
 
-case_on() { VELLOC_SIGN=1; velloc_sign_enabled; }
-run_case case_on && pass "VELLOC_SIGN=1 turns signing on" || fail "VELLOC_SIGN=1 turns signing on"
+case_off() { VELLOC_SIGN=0; ! velloc_sign_enabled; }
+run_case case_off && pass "VELLOC_SIGN=0 turns signing off" || fail "VELLOC_SIGN=0 turns signing off"
 
 # 2. The local config file is sourced and can flip the switch.
 case_config_file() {
@@ -78,7 +78,7 @@ VELLOC_SIGN_ACCOUNT=from-file
 }
 run_case case_env_beats_config && pass "env VELLOC_SIGN outranks the file" || fail "env VELLOC_SIGN outranks the file"
 
-case_config_absent() { velloc_sign_load_config; ! velloc_sign_enabled; }
+case_config_absent() { velloc_sign_load_config; velloc_sign_enabled; }
 run_case case_config_absent && pass "missing config file is not an error" || fail "missing config file is not an error"
 
 # 3. Incomplete configuration fails loudly and names what is missing.
