@@ -146,6 +146,8 @@ ensure_gn_available
 # shellcheck source=installer_signing.sh
 . "$WORKSPACE_DIR/installer_signing.sh"
 velloc_sign_load_config
+# shellcheck source=installer_bundled_binaries.sh
+. "$WORKSPACE_DIR/installer_bundled_binaries.sh"
 
 ensure_makensis_available() {
   if command -v makensis >/dev/null 2>&1; then
@@ -379,6 +381,12 @@ build_velloc_nsis_installer() {
 
   ensure_makensis_available
 
+  # ripgrep ships inside the installer (next to chrome.exe), signed like the
+  # rest of the payload — staged beside mini_installer.exe in the out dir.
+  velloc_stage_bundled_rg "$nsis_dir/bundled/rg.exe"     "$(dirname "$mini_installer_path")/velloc_bundled" || return 1
+  local rg_win=""
+  rg_win="$(to_windows_path "$VELLOC_BUNDLED_RG_PATH")"
+
   local mini_installer_win=""
   local master_prefs_win=""
   mini_installer_win="$(to_windows_path "$mini_installer_path")"
@@ -391,7 +399,7 @@ build_velloc_nsis_installer() {
     MSYS2_ARG_CONV_EXCL="*" makensis \
       "-DPRODUCT_NAME=$product_name" \
       "-DMINI_INSTALLER_SOURCE=$mini_installer_win" \
-      "-DMASTER_PREFERENCES_SOURCE=$master_prefs_win" \
+      "-DMASTER_PREFERENCES_SOURCE=$master_prefs_win"       "-DRG_SOURCE=$rg_win" \
       "$nsis_script_win"
   )
 
