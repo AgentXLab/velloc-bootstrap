@@ -280,3 +280,90 @@ velloc_sign_verify_packed() {
   fi
   echo "==> Packed payload: $count binaries, all signed"
 }
+
+# The NSIS wrapper unpacks its own plug-in DLLs (nsDialogs.dll for the MUI
+# pages, System.dll, ...) into $PLUGINSDIR at run time, and the stock ones in
+# NSIS's Plugins dir are unsigned — Store policy 10.2.9 wants every PE file of
+# the installer signed. Copies the plug-in dir to dest_dir and signs each
+# unsigned copy; makensis then packs from dest_dir (`!addplugindir`, which
+# outranks the stock dir). A copy is kept while it is newer than its source,
+# so a re-run re-signs nothing and an NSIS upgrade is picked up. Prints
+# dest_dir.
+velloc_sign_nsis_plugins() {
+  local src_dir="$1"
+  local dest_dir="$2"
+  local src name dest count=0 signed=0
+  if [ ! -d "$src_dir" ]; then
+    echo "ERROR: NSIS plug-in dir not found: $src_dir" >&2
+    return 1
+  fi
+  mkdir -p "$dest_dir" || return 1
+  for src in "$src_dir"/*.dll; do
+    [ -f "$src" ] || continue
+    count=$((count + 1))
+    name="$(basename "$src")"
+    dest="$dest_dir/$name"
+    if [ ! -f "$dest" ] || [ "$src" -nt "$dest" ]; then
+      cp -f "$src" "$dest" || return 1
+    fi
+    if velloc_sign_is_signed "$dest"; then
+      continue
+    fi
+    velloc_sign_file "$dest" >&2 || return 1
+    signed=$((signed + 1))
+  done
+  if [ "$count" -eq 0 ]; then
+    echo "ERROR: no plug-in DLLs in $src_dir." >&2
+    return 1
+  fi
+  echo "==> NSIS plug-ins: $count, signed $signed now" >&2
+  echo "$dest_dir"
+}
+
+# 7-Zip, which reads an NSIS installer's packed files: VELLOC_7Z, else 7z on
+# PATH, else the default install dir.
+velloc_sign_find_7z() {
+  local candidate
+  for candidate in "${VELLOC_7Z:-}" "$(command -v 7z 2>/dev/null)" \
+    "/c/Program Files/7-Zip/7z.exe" "C:/Program Files/7-Zip/7z.exe"; do
+    if [ -n "$candidate" ] && [ -f "$candidate" ]; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+  echo "ERROR: 7-Zip not found (set VELLOC_7Z); it is needed to prove the installer's packed binaries are signed." >&2
+  return 1
+}
+
+# Proves the finished installer ships no unsigned PE file: unpacks every
+# .exe/.dll it carries ($PLUGINSDIR's plug-ins, mini_installer.exe) and
+# verifies each. The installer itself is verified by velloc_sign_file.
+velloc_sign_verify_nsis_output() {
+  local installer="$1"
+  local sevenzip work file bad=0 count=0
+  sevenzip="$(velloc_sign_find_7z)" || return 1
+  work="$(mktemp -d)" || return 1
+  MSYS2_ARG_CONV_EXCL="*" "$sevenzip" e -y -o"$(velloc_sign_win_path "$work")" \
+    "$(velloc_sign_win_path "$installer")" '*.dll' '*.exe' -r >/dev/null || {
+    echo "ERROR: could not unpack $installer."
+    rm -rf "$work"
+    return 1
+  }
+  while IFS= read -r file; do
+    count=$((count + 1))
+    if ! velloc_sign_is_signed "$file"; then
+      echo "ERROR: installer carries an unsigned binary: $(basename "$file")"
+      bad=$((bad + 1))
+    fi
+  done < <(find "$work" -type f \( -iname '*.exe' -o -iname '*.dll' \))
+  rm -rf "$work"
+  if [ "$count" -eq 0 ]; then
+    echo "ERROR: no binaries found inside $installer."
+    return 1
+  fi
+  if [ "$bad" -ne 0 ]; then
+    echo "ERROR: $bad of $count binaries inside the installer are unsigned."
+    return 1
+  fi
+  echo "==> Installer contents: $count binaries, all signed"
+}

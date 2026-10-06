@@ -385,6 +385,17 @@ build_velloc_nsis_installer() {
   master_prefs_win="$(to_windows_path "$master_prefs")"
   nsis_script_win="$(to_windows_path "$nsis_script")"
 
+  # The installer unpacks NSIS's own plug-in DLLs at run time; pack signed
+  # copies of them (Store policy 10.2.9: every PE file signed).
+  local plugin_defines=()
+  if velloc_sign_enabled; then
+    local makensis_dir="" plugin_dir=""
+    makensis_dir="$(dirname "$(command -v makensis || command -v makensis.exe)")"
+    plugin_dir="$(velloc_sign_nsis_plugins "$makensis_dir/Plugins/x86-unicode" \
+      "$OUT_BASE/nsis-plugins/x86-unicode")" || return 1
+    plugin_defines=("-DVELLOC_NSIS_PLUGIN_DIR=$(to_windows_path "$plugin_dir")")
+  fi
+
   echo "==> makensis $nsis_script_win"
   (
     cd "$nsis_dir"
@@ -392,6 +403,7 @@ build_velloc_nsis_installer() {
       "-DPRODUCT_NAME=$product_name" \
       "-DMINI_INSTALLER_SOURCE=$mini_installer_win" \
       "-DMASTER_PREFERENCES_SOURCE=$master_prefs_win" \
+      "${plugin_defines[@]}" \
       "$nsis_script_win"
   )
 
@@ -401,7 +413,8 @@ build_velloc_nsis_installer() {
   fi
 
   if velloc_sign_enabled; then
-    velloc_sign_file "$output_path"
+    velloc_sign_file "$output_path" || return 1
+    velloc_sign_verify_nsis_output "$output_path" || return 1
   fi
 
   VELLOC_NSIS_INSTALLER_PATH="$output_path"

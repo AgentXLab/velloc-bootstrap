@@ -20,7 +20,9 @@ echo "$*" >>"$STUB_LOG"
 # `verify /pa /q <file>` is the "already signed?" probe: signed only when the
 # file is named in $STUB_SIGNED.
 if [ "$1" = verify ] && [ "$3" = /q ]; then
-  grep -qxF "$4" "${STUB_SIGNED:-/dev/null}" 2>/dev/null
+  grep -qxF "$4" "${STUB_SIGNED:-/dev/null}" 2>/dev/null && exit 0
+  # Files unpacked into a temp dir are named by basename alone.
+  grep -qxF "$(basename "${4//\\//}")" "${STUB_SIGNED_NAMES:-/dev/null}" 2>/dev/null
   exit $?
 fi
 exit "${STUB_EXIT:-0}"
@@ -354,7 +356,175 @@ else
   echo "SKIP: real chrome.release ($REAL_RELEASE not present in this checkout)"
 fi
 
-# 10. build.sh still parses with the wiring in place.
+# 10. The NSIS wrapper's own plug-in DLLs (unpacked into $PLUGINSDIR at run
+# time) are signed copies — Store policy 10.2.9: every PE file signed.
+make_plugin_fixture() {
+  PLUGIN_SRC="$TMP/nsis/Plugins/x86-unicode"
+  PLUGIN_DEST="$TMP/out/nsis-plugins/x86-unicode"
+  rm -rf "$TMP/nsis" "$PLUGIN_DEST"
+  mkdir -p "$PLUGIN_SRC"
+  echo stock >"$PLUGIN_SRC/nsDialogs.dll"
+  echo stock >"$PLUGIN_SRC/System.dll"
+  echo text >"$PLUGIN_SRC/readme.txt"
+  configure
+  velloc_sign_check_config >/dev/null || return 1
+  export STUB_SIGNED="$TMP/plugins_signed.txt"
+  : >"$STUB_SIGNED"
+}
+
+case_nsis_plugins() {
+  make_plugin_fixture || return 1
+  rm -f "$STUB_LOG"
+  local got
+  got="$(velloc_sign_nsis_plugins "$PLUGIN_SRC" "$PLUGIN_DEST" 2>/dev/null)" || return 1
+  [ "$got" = "$PLUGIN_DEST" ] || { echo "got: $got"; return 1; }
+  [ -f "$PLUGIN_DEST/nsDialogs.dll" ] && [ -f "$PLUGIN_DEST/System.dll" ] \
+    && [ ! -e "$PLUGIN_DEST/readme.txt" ] || return 1
+  grep -q '^sign .*nsDialogs.dll$' "$STUB_LOG" && grep -q '^sign .*System.dll$' "$STUB_LOG" \
+    || return 1
+  # The stock dir is left as it was: only the copies are signed.
+  ! grep -q "^sign .*$(basename "$TMP")/nsis/" "$STUB_LOG"
+}
+run_case case_nsis_plugins && pass "NSIS plug-ins copied and signed" || fail "NSIS plug-ins copied and signed"
+
+# A re-run keeps the signed copies and signs nothing; an NSIS upgrade (a
+# source newer than its copy) is copied and signed again.
+case_nsis_plugins_rerun() {
+  make_plugin_fixture || return 1
+  velloc_sign_nsis_plugins "$PLUGIN_SRC" "$PLUGIN_DEST" >/dev/null 2>&1 || return 1
+  echo signed >"$PLUGIN_DEST/System.dll"
+  velloc_sign_win_path "$PLUGIN_DEST/System.dll" >>"$STUB_SIGNED"
+  velloc_sign_win_path "$PLUGIN_DEST/nsDialogs.dll" >>"$STUB_SIGNED"
+  touch -d '2000-01-01' "$PLUGIN_SRC/System.dll" "$PLUGIN_SRC/nsDialogs.dll"
+  rm -f "$STUB_LOG"
+  velloc_sign_nsis_plugins "$PLUGIN_SRC" "$PLUGIN_DEST" >/dev/null 2>&1 || return 1
+  ! grep -q '^sign ' "$STUB_LOG" 2>/dev/null || return 1
+  [ "$(cat "$PLUGIN_DEST/System.dll")" = signed ] || return 1
+  touch -d '2099-01-01' "$PLUGIN_SRC/System.dll"
+  velloc_sign_nsis_plugins "$PLUGIN_SRC" "$PLUGIN_DEST" >/dev/null 2>&1 || return 1
+  [ "$(cat "$PLUGIN_DEST/System.dll")" = stock ]
+}
+run_case case_nsis_plugins_rerun && pass "NSIS plug-in copies kept; an upgrade is re-copied" \
+  || fail "NSIS plug-in copies kept; an upgrade is re-copied"
+
+case_nsis_plugins_fails() {
+  make_plugin_fixture || return 1
+  ! STUB_EXIT=1 velloc_sign_nsis_plugins "$PLUGIN_SRC" "$PLUGIN_DEST" >/dev/null 2>&1
+}
+run_case case_nsis_plugins_fails && pass "plug-in signing failure propagates" || fail "plug-in signing failure propagates"
+
+case_nsis_plugins_missing() {
+  configure
+  ! velloc_sign_nsis_plugins "$TMP/no-nsis/Plugins/x86-unicode" "$TMP/out/p" >/dev/null 2>&1
+}
+run_case case_nsis_plugins_missing && pass "missing plug-in dir fails" || fail "missing plug-in dir fails"
+
+# The finished installer is unpacked and every binary in it verified. A stub
+# 7z "unpacks" the names in $STUB_7Z_FILES into its -o dir.
+SEVENZIP_STUB="$TMP/7z.sh"
+cat >"$SEVENZIP_STUB" <<'EOF'
+#!/usr/bin/env bash
+for arg in "$@"; do
+  case "$arg" in
+    -o*) dir="${arg#-o}" ;;
+  esac
+done
+command -v cygpath >/dev/null 2>&1 && dir="$(cygpath -u "$dir")"
+for name in $STUB_7Z_FILES; do echo x >"$dir/$name"; done
+EOF
+chmod +x "$SEVENZIP_STUB"
+
+case_verify_nsis_output() {
+  configure
+  export VELLOC_7Z="$SEVENZIP_STUB" STUB_7Z_FILES="mini_installer.exe nsDialogs.dll System.dll"
+  export STUB_SIGNED_NAMES="$TMP/signed_names.txt"
+  printf '%s\n' mini_installer.exe nsDialogs.dll System.dll >"$STUB_SIGNED_NAMES"
+  local out
+  out="$(velloc_sign_verify_nsis_output "$TMP/Setup.exe")" || { echo "$out"; return 1; }
+  [[ "$out" == *"3 binaries, all signed"* ]] || { echo "$out"; return 1; }
+}
+run_case case_verify_nsis_output && pass "signed installer contents pass" || fail "signed installer contents pass"
+
+# The guard that pins the Store finding: a stock, unsigned plug-in inside the
+# installer fails the package and is named.
+case_verify_nsis_output_unsigned() {
+  configure
+  export VELLOC_7Z="$SEVENZIP_STUB" STUB_7Z_FILES="mini_installer.exe nsDialogs.dll System.dll"
+  export STUB_SIGNED_NAMES="$TMP/signed_names.txt"
+  printf '%s\n' mini_installer.exe System.dll >"$STUB_SIGNED_NAMES"
+  local out
+  out="$(velloc_sign_verify_nsis_output "$TMP/Setup.exe")" && { echo "$out"; return 1; }
+  [[ "$out" == *"unsigned binary: nsDialogs.dll"* && "$out" == *"1 of 3"* ]] || { echo "$out"; return 1; }
+}
+run_case case_verify_nsis_output_unsigned && pass "unsigned plug-in inside the installer fails" \
+  || fail "unsigned plug-in inside the installer fails"
+
+case_verify_nsis_output_no_7z() {
+  configure
+  export VELLOC_7Z="$TMP/no-7z.exe" PATH="/usr/bin"
+  velloc_sign_find_7z() { echo "ERROR: 7-Zip not found" >&2; return 1; }
+  ! velloc_sign_verify_nsis_output "$TMP/Setup.exe" >/dev/null 2>&1
+}
+run_case case_verify_nsis_output_no_7z && pass "no 7-Zip fails the check" || fail "no 7-Zip fails the check"
+
+case_nsis_build_wiring() {
+  local body
+  body="$(sed -n '/^build_velloc_nsis_installer() {/,/^}/p' "$HERE/build.sh")"
+  [[ "$body" == *"velloc_sign_nsis_plugins"* && "$body" == *"-DVELLOC_NSIS_PLUGIN_DIR="* \
+    && "$body" == *"velloc_sign_verify_nsis_output"* ]]
+}
+run_case case_nsis_build_wiring && pass "build.sh packs signed plug-ins and verifies the installer" \
+  || fail "build.sh packs signed plug-ins and verifies the installer"
+
+# The wrapper must take the define; and with a real makensis, a dir added by
+# !addplugindir must outrank NSIS's stock plug-ins (else the signed copies
+# would be ignored and the stock ones packed).
+REAL_NSI="$HERE/src/custom_browser/installer/custom_browser_installer_wrapper.nsi"
+if [ -f "$REAL_NSI" ]; then
+  grep -qF '!addplugindir /x86-unicode "${VELLOC_NSIS_PLUGIN_DIR}"' "$REAL_NSI" \
+    && pass "wrapper .nsi adds the signed plug-in dir" || fail "wrapper .nsi adds the signed plug-in dir"
+else
+  echo "SKIP: wrapper .nsi ($REAL_NSI not present in this checkout)"
+fi
+MAKENSIS="$(command -v makensis 2>/dev/null || true)"
+[ -z "$MAKENSIS" ] && [ -f "/c/Program Files (x86)/NSIS/makensis.exe" ] && MAKENSIS="/c/Program Files (x86)/NSIS/makensis.exe"
+REAL_7Z="$(command -v 7z 2>/dev/null || true)"
+[ -z "$REAL_7Z" ] && [ -f "/c/Program Files/7-Zip/7z.exe" ] && REAL_7Z="/c/Program Files/7-Zip/7z.exe"
+if [ -n "$MAKENSIS" ] && [ -n "$REAL_7Z" ] && command -v cygpath >/dev/null 2>&1; then
+  case_addplugindir_outranks_stock() {
+    local work="$TMP/plugindir" stock
+    stock="$(dirname "$MAKENSIS")/Plugins/x86-unicode"
+    mkdir -p "$work/plug"
+    cp "$stock/nsDialogs.dll" "$stock/System.dll" "$work/plug/"
+    printf 'VELLOCMARK' >>"$work/plug/nsDialogs.dll"
+    printf 'VELLOCMARK' >>"$work/plug/System.dll"
+    cat >"$work/t.nsi" <<'NSI'
+!include "MUI2.nsh"
+!ifdef VELLOC_NSIS_PLUGIN_DIR
+  !addplugindir /x86-unicode "${VELLOC_NSIS_PLUGIN_DIR}"
+!endif
+OutFile "t.exe"
+RequestExecutionLevel user
+!insertmacro MUI_PAGE_WELCOME
+!insertmacro MUI_LANGUAGE "English"
+Section
+  System::Call 'kernel32::GetTickCount()i.r0'
+SectionEnd
+NSI
+    ( cd "$work" && MSYS2_ARG_CONV_EXCL="*" "$MAKENSIS" /V1 \
+      "-DVELLOC_NSIS_PLUGIN_DIR=$(cygpath -w "$work/plug")" t.nsi ) >/dev/null || return 1
+    MSYS2_ARG_CONV_EXCL="*" "$REAL_7Z" e -y -o"$(cygpath -w "$work/x")" \
+      "$(cygpath -w "$work/t.exe")" '*.dll' -r >/dev/null || return 1
+    [ "$(tail -c 10 "$work/x/nsDialogs.dll")" = VELLOCMARK ] \
+      && [ "$(tail -c 10 "$work/x/System.dll")" = VELLOCMARK ]
+  }
+  run_case case_addplugindir_outranks_stock && pass "makensis packs the !addplugindir copies, not the stock plug-ins" \
+    || fail "makensis packs the !addplugindir copies, not the stock plug-ins"
+else
+  echo "SKIP: makensis + 7-Zip not both available (plug-in precedence not checked)"
+fi
+
+# 11. build.sh still parses with the wiring in place.
 bash -n "$HERE/build.sh" && pass "build.sh parses" || fail "build.sh parses"
 
 if [ "$failures" -gt 0 ]; then
