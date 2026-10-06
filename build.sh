@@ -365,7 +365,9 @@ build_velloc_nsis_installer() {
   local nsis_script="$nsis_dir/custom_browser_installer_wrapper.nsi"
   local nsis_script_win=""
   local master_prefs="$nsis_dir/master_preferences"
-  local product_name="Velloc"
+  # The display name (branding.json display_name, BRANDING PRODUCT_FULLNAME);
+  # the install directory and registry keys stay "Velloc".
+  local product_name="Velloc Code"
   local output_path="$nsis_dir/${product_name} Setup.exe"
 
   if [ ! -f "$nsis_script" ]; then
