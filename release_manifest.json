@@ -1,41 +1,43 @@
 {
-  "tag": "velloc-v1.149.1.36",
-  "created_utc": "2026-10-05T14:07:06Z",
+  "tag": "velloc-v1.149.1.37",
+  "created_utc": "2026-10-06T16:30:12Z",
   "versions": {
     "custom_browser_major": 1,
     "chrome_major": 149,
     "interface_version": 1,
-    "custom_browser_patch": 36
+    "custom_browser_patch": 37
   },
   "repos": [
     {
       "name": "root",
       "path": ".",
-      "tag": "velloc-v1.149.1.36",
-      "head": "94f9393de3aeac743ddb0c00d3c3b783c9afce48"
+      "tag": "velloc-v1.149.1.37",
+      "head": "af2fc4b14de2990fa5c8ed762430d281a6a2e6ba"
     },
     {
       "name": "src",
       "path": "src",
-      "tag": "velloc-v1.149.1.36",
-      "head": "c0cf70256cb95edfd2f846fb921d385c534961e4"
+      "tag": "velloc-v1.149.1.37",
+      "head": "6a0242978ecd8fd9b264e0b42fe079d01b3f4ace"
     },
     {
       "name": "custom_browser",
       "path": "src\\custom_browser",
-      "tag": "velloc-v1.149.1.36",
-      "head": "2084d945794ebb0a581e4230c4f3f96a2abd37fa"
+      "tag": "velloc-v1.149.1.37",
+      "head": "ac76da614b9fe1762a12e79c07d45b553eef1720"
     },
     {
       "name": "nexus_web",
       "path": "nexus_web",
-      "tag": "velloc-v1.149.1.36",
-      "head": "01b280304d17a2c7bd71b92672d19c8ab17022d0"
+      "tag": "velloc-v1.149.1.37",
+      "head": "f32d7bcbcaa106f25eeac55301ed38bd96184ec8"
     }
   ],
   "e2e_verified": false,
   "e2e_waived": [
-    "e2e: the recorded run did not pass (outcome='failed', 7 failed)",
-    "e2e: internal: moved since the run (bddaa765 -> fff88e03) - the record is stale"
+    "e2e: the recorded run was not the full suite (2/109 spec files); first missing: anthropic-thinking-tier-shape.spec.ts, bridge-routing.spec.ts, cancel-mid-stream.spec.ts",
+    "e2e: custom_browser: recorded run was on 'product-display-name', but a client release ships 'main' - a green run off the shipping branch does not gate one",
+    "e2e: internal: moved since the run (67ef04b5 -> ad6ab203) - the record is stale",
+    "e2e: the binary under test (src/out/Debug/chrome.dll) was built 2026-10-06T16:06:06.661000+00:00 but custom_browser/chromium_overrides/velloc/symlink/chrome/app/theme/velloc/BRANDING was modified 2026-10-06T16:26:30.903105+00:00 - the run exercised code older than what would ship. Rebuild, then re-run the suite"
   ]
 }
