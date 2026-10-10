@@ -1,45 +1,41 @@
 {
-  "tag": "velloc-v1.149.1.38",
-  "created_utc": "2026-10-07T00:21:59Z",
+  "tag": "velloc-v1.149.2.0",
+  "created_utc": "2026-10-10T14:00:05Z",
   "versions": {
     "custom_browser_major": 1,
     "chrome_major": 149,
-    "interface_version": 1,
-    "custom_browser_patch": 38
+    "interface_version": 2,
+    "custom_browser_patch": 0
   },
   "repos": [
     {
       "name": "root",
       "path": ".",
-      "tag": "velloc-v1.149.1.38",
-      "head": "63aea4477d128159949c73f2f1cc14ba6309fba5"
+      "tag": "velloc-v1.149.2.0",
+      "head": "92a69eb0f6ccbbd8c9895d51d7781dad510ea11c"
     },
     {
       "name": "src",
       "path": "src",
-      "tag": "velloc-v1.149.1.38",
+      "tag": "velloc-v1.149.2.0",
       "head": "6a0242978ecd8fd9b264e0b42fe079d01b3f4ace"
     },
     {
       "name": "custom_browser",
       "path": "src\\custom_browser",
-      "tag": "velloc-v1.149.1.38",
-      "head": "ba3ae4e867e5acc430c48dec1d53df8173ca51fb"
+      "tag": "velloc-v1.149.2.0",
+      "head": "14696cea8fa14bd20fced6c3193fd029870db2d6"
     },
     {
       "name": "nexus_web",
       "path": "nexus_web",
-      "tag": "velloc-v1.149.1.38",
-      "head": "49383ca3dc632d7a4f9a49217e45938aada51e47"
+      "tag": "velloc-v1.149.2.0",
+      "head": "0be1c6ccec9cbe9ab3ad77dc6da537861ce6b01b"
     }
   ],
   "e2e_verified": false,
   "e2e_waived": [
-    "e2e: the recorded run was not the full suite (2/109 spec files); first missing: anthropic-thinking-tier-shape.spec.ts, bridge-routing.spec.ts, cancel-mid-stream.spec.ts",
-    "e2e: custom_browser: recorded run was on 'shell-kill-and-log', but a client release ships 'main' - a green run off the shipping branch does not gate one",
-    "e2e: custom_browser: had uncommitted tracked changes during the run, so what was tested is not what any commit contains",
-    "e2e: custom_browser: moved since the run (652595ca -> 01ce320d) - the record is stale",
-    "e2e: internal: moved since the run (e375c307 -> 5d6d0b64) - the record is stale",
-    "e2e: the binary under test (src/out/Debug/chrome.dll) was built 2026-10-06T23:38:42.128000+00:00 but custom_browser/browser/nexus/api/shell/nexus_persistent_shells.h was modified 2026-10-07T00:01:28.836919+00:00 - the run exercised code older than what would ship. Rebuild, then re-run the suite"
+    "e2e: the recorded run was not the full suite (3/111 spec files); first missing: anthropic-thinking-tier-shape.spec.ts, bridge-routing.spec.ts, cancel-mid-stream.spec.ts",
+    "e2e: the binary under test (src/out/Debug/chrome.dll) was built 2026-10-10T10:48:48.908000+00:00 but custom_browser/resources/browser_webui/pages/nexus/protocol/runtimeProtocol/frames.ts was modified 2026-10-10T13:57:46.601364+00:00 - the run exercised code older than what would ship. Rebuild, then re-run the suite"
   ]
 }
